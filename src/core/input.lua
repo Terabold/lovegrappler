@@ -1,7 +1,9 @@
--- input.lua (Multi-Key Support + Jump Buffer)
+-- src/core/input.lua
+-- Multi-Key Input with Jump Buffer
+
 local Input = {}
 
--- Key bindings (multiple keys per action for WASD + Arrows)
+-- Key bindings (multiple keys per action)
 Input.keys = {
     jump = {"z", "space"},
     dash = {"x", "lshift"},
@@ -19,15 +21,20 @@ Input.keys = {
     menu_right = {"right", "d"}
 }
 
--- Jump buffer (same as Celeste ~0.1 seconds)
+-- Buffered input
 Input.jumpBufferTimer = 0
 local BUFFER_TIME = 0.1
 
+-- Just-pressed tracking
+local keysPressed = {}
+
 function Input:update(dt)
     self.jumpBufferTimer = math.max(0, self.jumpBufferTimer - dt)
+    keysPressed = {}  -- Clear just-pressed
 end
 
 function Input:keypressed(key)
+    keysPressed[key] = true
     if self:isKeyInAction(key, "jump") then
         self.jumpBufferTimer = BUFFER_TIME
     end
@@ -57,6 +64,18 @@ function Input:down(action)
     return false
 end
 
+function Input:pressed(action)
+    local bindings = self.keys[action]
+    if bindings == nil then return false end
+    if type(bindings) == "string" then 
+        return keysPressed[bindings] or false
+    end
+    for _, k in ipairs(bindings) do
+        if keysPressed[k] then return true end
+    end
+    return false
+end
+
 function Input:consumeJump()
     if self.jumpBufferTimer > 0 then
         self.jumpBufferTimer = 0
@@ -72,23 +91,6 @@ function Input:getAxis()
     if self:down("up") then y = y - 1 end
     if self:down("down") then y = y + 1 end
     return x, y
-end
-
-function Input:getKeyName(action)
-    local bindings = self.keys[action]
-    if bindings == nil then return "?" end
-    if type(bindings) == "string" then return bindings end
-    return bindings[1] or "?"
-end
-
-function Input:rebind(action, key)
-    local bindings = self.keys[action]
-    if bindings == nil then return end
-    if type(bindings) == "string" then
-        self.keys[action] = key
-    else
-        self.keys[action][1] = key
-    end
 end
 
 return Input

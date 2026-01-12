@@ -9,9 +9,8 @@ function love.conf(t)
     t.window.resizable = true
     t.window.minwidth = 320
     t.window.minheight = 180
-    -- VSync setting: will be controlled by settings menu
-    -- Default to ON (vsync = 1) like Celeste
-    -- Game runs at locked 60 FPS regardless of vsync setting
+    -- IMPORTANT: Enable vsync to prevent tearing and reduce jitter
+    -- The fixed timestep handles frame pacing internally
     t.window.vsync = 1
     t.window.highdpi = true
 
