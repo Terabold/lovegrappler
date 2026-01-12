@@ -28,6 +28,8 @@ local dead = false
 
 -- Camera
 local camX, camY = 0, 0
+local roomScale = 1       -- Scale factor when room is smaller than viewport
+local roomOffsetX, roomOffsetY = 0, 0  -- Offset to center small rooms
 
 -- Transition
 local trActive, trPhase, trTimer, trAlpha = false, 0, 0, 0
@@ -98,18 +100,34 @@ local function depenetrate()
     end
 end
 
--- Camera: small rooms lock to room origin, large rooms follow player
+-- Camera: small rooms scale down and center, large rooms follow player
 local function updateCam()
     local r = Map.currentRoom
     if not r then return end
     
-    -- Small room: camera = room origin (room draws at screen 0,0)
-    -- Large room: follow player with edge clamping
-    if r.w <= GW then camX = r.x
-    else camX = floor(max(r.x, min(px + pw/2 - GW/2, r.x + r.w - GW))) end
+    -- Calculate scale if room is smaller than viewport
+    local scaleX = r.w < GW and (r.w / GW) or 1
+    local scaleY = r.h < GH and (r.h / GH) or 1
+    roomScale = min(scaleX, scaleY)
     
-    if r.h <= GH then camY = r.y
-    else camY = floor(max(r.y, min(py + ph/2 - GH/2, r.y + r.h - GH))) end
+    -- For rooms smaller than viewport: clamp camera to room, center on screen
+    if r.w <= GW then
+        camX = r.x
+        -- Center horizontally (offset is in viewport coords, applied after transform)
+        roomOffsetX = floor((GW - r.w / roomScale) / 2) * roomScale
+    else
+        camX = floor(max(r.x, min(px + pw/2 - GW/2, r.x + r.w - GW)))
+        roomOffsetX = 0
+    end
+    
+    if r.h <= GH then
+        camY = r.y
+        -- Center vertically
+        roomOffsetY = floor((GH - r.h / roomScale) / 2) * roomScale
+    else
+        camY = floor(max(r.y, min(py + ph/2 - GH/2, r.y + r.h - GH)))
+        roomOffsetY = 0
+    end
 end
 
 -- Transition
@@ -320,14 +338,33 @@ function Game:draw()
     local r = Map.currentRoom
     if not r then lg.setCanvas() return canvas end
     
-    -- Scissor to EXACTLY room size on screen (prevents seeing outside)
-    local scrX, scrY = r.x - camX, r.y - camY
-    local sW, sH = min(GW, r.w), min(GH, r.h)
-    local sX, sY = max(0, scrX), max(0, scrY)
-    sW, sH = min(sW, GW - sX), min(sH, GH - sY)
+    -- Calculate the actual scaled dimensions
+    local drawScale = 1 / roomScale  -- Inverse: we scale UP to fill viewport
+    
+    -- Calculate the area the scaled room will occupy in viewport coords
+    local scaledRoomW = r.w * drawScale
+    local scaledRoomH = r.h * drawScale
+    
+    -- Center offset in canvas coordinates
+    local offsetX = floor((GW - scaledRoomW) / 2)
+    local offsetY = floor((GH - scaledRoomH) / 2)
+    
+    -- For full-size or larger rooms, no offset needed
+    if r.w >= GW then offsetX = 0 end
+    if r.h >= GH then offsetY = 0 end
+    
+    -- Scissor to prevent drawing outside the scaled room area
+    local sX = max(0, offsetX)
+    local sY = max(0, offsetY)
+    local sW = min(GW - sX, scaledRoomW)
+    local sH = min(GH - sY, scaledRoomH)
     
     lg.setScissor(sX, sY, sW, sH)
     lg.push()
+    
+    -- Apply centering offset, then scale, then camera translation
+    lg.translate(offsetX, offsetY)
+    lg.scale(drawScale, drawScale)
     lg.translate(-camX, -camY)
     
     -- Background
